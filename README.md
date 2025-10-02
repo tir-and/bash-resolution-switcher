@@ -6,4 +6,8 @@ It's safety-conscious, with sanity checks and a timeout-based revert mechanism.
 
 Pure Bash terminal-based tool. 
 
-It assumes you're on a Linux setup with Xorg (not Wayland)
+Dependencies:
+ - Xorg (obviously)
+ - xrandr (should be even more obviously)
+
+It assumes you're on a Linux setup with Xorg (not Wayland).
