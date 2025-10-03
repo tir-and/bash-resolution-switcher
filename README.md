@@ -8,14 +8,14 @@ Pure Bash terminal-based tool.
 
 Don't forget to make it executable:
 ```
-chmod +x ~/bin/mini-randr.sh
+chmod +x ~/res-xrandr.sh
 ```
 
 If you can add it to somwhere in PATH to make it callable anywhere.
 ```
-mv mini-randr.sh ~/.local/bin/mini-randr
+mv res-xrandr.sh ~/.local/bin/res-xrandr
 or
-sudo mv mini-randr.sh /usr/local/bin/mini-randr #for all users
+sudo mv res-xrandr.sh /usr/local/bin/res-xrandr #for all users
 ```
 
 
