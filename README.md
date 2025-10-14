@@ -22,5 +22,3 @@ sudo mv res-xrandr.sh /usr/local/bin/res-xrandr #for all users
 Dependencies:
  - Xorg (obviously)
  - xrandr (should be even more obviously)
-
-It assumes you're on a Linux setup with Xorg (not Wayland).
