@@ -14,25 +14,17 @@ fi
 # --- helpers ---
 die() { echo "Error: $*" >&2; exit 1; }
 
-apply_mode() {
-  local out="$1" mode="$2" rate="$3"
-  xrandr --output "$out" --off
-  if [[ -n "$rate" ]]; then
-    xrandr --fb "$mode" --output "$out" --mode "$mode" --rate "$rate" --pos 0x0
-  else
-    xrandr --fb "$mode" --output "$out" --mode "$mode" --pos 0x0
-  fi
-}
-
 # get current mode and rate for an output
 current_mode_rate() {
   local out="$1"
+  # current line looks like: "  1920x1080     60.00*+  75.00"
   xrandr --query | awk -v o="$out" '
-    substr($0, 1, length(o)+1) == o" " { inout=1; next }
-    inout && $0 ~ "^[^ ]" { inout=0 }
+    $0 ~ "^"o" " { inout=1; next }
+    inout && $0 ~ "^[^ ]" { inout=0 }  # next output section
     inout && /\*/ {
-      for (i=1;i<=NF;i++) if ($i ~ /^[0-9]+(\.[0-9]+)?\*[+!]?$/) {
-        rate=$i; sub(/\*.*$/, "", rate)
+      # pick the starred mode/refresh
+      for (i=1;i<=NF;i++) if ($i ~ /^[0-9]+(\.[0-9]+)?\*[\+\!]?$/) {
+        rate=$i; sub(/\*.*$/,"",rate)
       }
       print $1, rate
       exit
@@ -40,12 +32,7 @@ current_mode_rate() {
   '
 }
 
-# --- initialise variables so set -u never fires ---
-RATE=""
-CUR_MODE=""
-CUR_RATE=""
-
-# --- list outputs (connected only) ---
+# list outputs (connected only)
 mapfile -t outputs < <(xrandr --query | awk '/ connected/ {print $1}')
 (( ${#outputs[@]} )) || die "No connected outputs found."
 
@@ -54,11 +41,13 @@ select OUT in "${outputs[@]}"; do
   [[ -n "${OUT:-}" ]] && break
 done
 
-# --- build list of resolutions for OUT ---
+# build list of resolutions for OUT
+# lines like: "  2560x1440  59.95*+ 74.97"
 mapfile -t modes < <(xrandr --query | awk -v o="$OUT" '
-  substr($0, 1, length(o)+1) == o" " { inout=1; next }
-  inout && $0 ~ "^[^ ]" { inout=0 }
+  $0 ~ "^"o" " { inout=1; next }
+  inout && $0 ~ "^[^ ]" { inout=0 }   # next output
   inout && /^[[:space:]]+[0-9]/ { print $1 }' | uniq)
+
 (( ${#modes[@]} )) || die "No modes found for $OUT."
 
 echo
@@ -67,10 +56,10 @@ select MODE in "${modes[@]}"; do
   [[ -n "${MODE:-}" ]] && break
 done
 
-# --- list refresh rates for the chosen MODE ---
+# list refresh rates for the chosen MODE
 mapfile -t rates < <(xrandr --query | awk -v o="$OUT" -v m="$MODE" '
-  substr($0, 1, length(o)+1) == o" " { inout=1; next }
-  inout && $0 ~ "^[^ ]" { inout=0 }
+  $0 ~ "^"o" " { inout=1; next }
+  inout && $0 ~ "^[^ ]" { inout=0 }   # next output
   inout && $1==m {
     for (i=2;i<=NF;i++) {
       r=$i
@@ -90,42 +79,39 @@ else
   done
 fi
 
-# --- capture current for rollback ---
-read -r CUR_MODE CUR_RATE < <(current_mode_rate "$OUT") || true
+# capture current for rollback
+read -r CUR_MODE CUR_RATE < <(current_mode_rate "$OUT")
 CUR_MODE="${CUR_MODE:-}"
 CUR_RATE="${CUR_RATE:-}"
 
 echo
 echo "About to apply:"
-if [[ -n "$RATE" ]]; then
-  echo "  xrandr --fb $MODE --output $OUT --mode $MODE --rate $RATE --pos 0x0"
+if [[ -n "${RATE:-}" ]]; then
+  echo "  xrandr --output $OUT --mode $MODE --rate $RATE"
 else
-  echo "  xrandr --fb $MODE --output $OUT --mode $MODE --pos 0x0"
+  echo "  xrandr --output $OUT --mode $MODE"
 fi
 echo "Current: ${CUR_MODE:-unknown} @ ${CUR_RATE:-unknown} Hz"
 echo
-echo "Note: display will go dark briefly while switching."
-echo
 
-# --- apply new setting ---
-if ! apply_mode "$OUT" "$MODE" "$RATE"; then
-  die "Failed to apply mode/rate."
+# apply new setting
+if [[ -n "${RATE:-}" ]]; then
+  xrandr --output "$OUT" --mode "$MODE" --rate "$RATE" || die "Failed to apply mode/rate."
+else
+  xrandr --output "$OUT" --mode "$MODE" || die "Failed to apply mode."
 fi
 
-# --- confirm with timeout and rollback ---
+# confirm with timeout and rollback
 TIMEOUT=10
 echo -n "Is the display OK? (y/N) auto-revert in ${TIMEOUT}s: "
 read -r -t "$TIMEOUT" ANS || ANS=""
-
 if [[ "${ANS,,}" != "y" && "${ANS,,}" != "yes" ]]; then
   echo
   echo "Reverting to ${CUR_MODE:-unknown} @ ${CUR_RATE:-unknown}..."
   if [[ -n "$CUR_MODE" && -n "$CUR_RATE" ]]; then
-    xrandr --output "$OUT" --off
-    xrandr --fb "$CUR_MODE" --output "$OUT" --mode "$CUR_MODE" --rate "$CUR_RATE" --pos 0x0 || true
+    xrandr --output "$OUT" --mode "$CUR_MODE" --rate "$CUR_RATE" || true
   elif [[ -n "$CUR_MODE" ]]; then
-    xrandr --output "$OUT" --off
-    xrandr --fb "$CUR_MODE" --output "$OUT" --mode "$CUR_MODE" --pos 0x0 || true
+    xrandr --output "$OUT" --mode "$CUR_MODE" || true
   fi
   echo "Reverted."
 else
