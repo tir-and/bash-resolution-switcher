@@ -14,10 +14,19 @@ fi
 # --- helpers ---
 die() { echo "Error: $*" >&2; exit 1; }
 
+apply_mode() {
+  local out="$1" mode="$2" rate="$3"
+  xrandr --output "$out" --off
+  if [[ -n "$rate" ]]; then
+    xrandr --fb "$mode" --output "$out" --mode "$mode" --rate "$rate" --pos 0x0
+  else
+    xrandr --fb "$mode" --output "$out" --mode "$mode" --pos 0x0
+  fi
+}
+
 # get current mode and rate for an output
 current_mode_rate() {
   local out="$1"
-  # current line looks like: "  1920x1080     60.00*+  75.00"
   xrandr --query | awk -v o="$out" '
     substr($0, 1, length(o)+1) == o" " { inout=1; next }
     inout && $0 ~ "^[^ ]" { inout=0 }
@@ -89,20 +98,18 @@ CUR_RATE="${CUR_RATE:-}"
 echo
 echo "About to apply:"
 if [[ -n "$RATE" ]]; then
-  echo "  xrandr --output $OUT --mode $MODE --rate $RATE --fb $MODE"
+  echo "  xrandr --fb $MODE --output $OUT --mode $MODE --rate $RATE --pos 0x0"
 else
-  echo "  xrandr --output $OUT --mode $MODE --fb $MODE"
+  echo "  xrandr --fb $MODE --output $OUT --mode $MODE --pos 0x0"
 fi
 echo "Current: ${CUR_MODE:-unknown} @ ${CUR_RATE:-unknown} Hz"
 echo
+echo "Note: display will go dark briefly while switching."
+echo
 
 # --- apply new setting ---
-if [[ -n "$RATE" ]]; then
-  xrandr --output "$OUT" --mode "$MODE" --rate "$RATE" --fb "$MODE" \
-    || die "Failed to apply mode/rate."
-else
-  xrandr --output "$OUT" --mode "$MODE" --fb "$MODE" \
-    || die "Failed to apply mode."
+if ! apply_mode "$OUT" "$MODE" "$RATE"; then
+  die "Failed to apply mode/rate."
 fi
 
 # --- confirm with timeout and rollback ---
@@ -114,9 +121,11 @@ if [[ "${ANS,,}" != "y" && "${ANS,,}" != "yes" ]]; then
   echo
   echo "Reverting to ${CUR_MODE:-unknown} @ ${CUR_RATE:-unknown}..."
   if [[ -n "$CUR_MODE" && -n "$CUR_RATE" ]]; then
-    xrandr --output "$OUT" --mode "$CUR_MODE" --rate "$CUR_RATE" --fb "$CUR_MODE" || true
+    xrandr --output "$OUT" --off
+    xrandr --fb "$CUR_MODE" --output "$OUT" --mode "$CUR_MODE" --rate "$CUR_RATE" --pos 0x0 || true
   elif [[ -n "$CUR_MODE" ]]; then
-    xrandr --output "$OUT" --mode "$CUR_MODE" --fb "$CUR_MODE" || true
+    xrandr --output "$OUT" --off
+    xrandr --fb "$CUR_MODE" --output "$OUT" --mode "$CUR_MODE" --pos 0x0 || true
   fi
   echo "Reverted."
 else
